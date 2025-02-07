@@ -15,29 +15,11 @@ jobs:
 
       - name: Execute script
         run: |
-          # 查找仓库中以 .txt 为后缀的文件，并提取文件名（不含扩展名）
           filename=$(find . -type f -name "*.txt" | sed 's/\.\///g' | sed 's/\.txt//g')
-          echo "Found filename: $filename"
-          
-          # 创建与文件名同名的目录
           mkdir -p "$filename"
-          
-          # 将 filename 导出到 GitHub 环境变量，以便后续步骤使用
           echo "filename=$filename" >> "$GITHUB_ENV"
-          
-          # 清理旧的文件（如果存在）
-          rm -f local_manifests.xml
-          
-          # 执行 adapt.sh 脚本，生成 local_manifests.xml
           bash adapt.sh "$filename.txt"
-          
-          # 将生成的 XML 文件移动到对应目录中
           mv local_manifests.xml "$filename/"
-          
-          # 将其他相关变量导出（可选，后续步骤如需使用可参考）
-          echo "TESTING=$(cat test_status)" >> "$GITHUB_ENV"
-          echo "TESTING_URL=$(cat url)" >> "$GITHUB_ENV"
-          echo "TESTING_BRANCH=$(cat branch)" >> "$GITHUB_ENV"
 
       - name: Upload Manifests Artifact
         id: upload_artifact
