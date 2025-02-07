@@ -33,12 +33,22 @@ jobs:
           
           # 将生成的 XML 文件移动到对应目录中
           mv local_manifests.xml "$filename/"
-        
+          
+          # 将其他相关变量导出（可选，后续步骤如需使用可参考）
+          echo "TESTING=$(cat test_status)" >> "$GITHUB_ENV"
+          echo "TESTING_URL=$(cat url)" >> "$GITHUB_ENV"
+          echo "TESTING_BRANCH=$(cat branch)" >> "$GITHUB_ENV"
 
       - name: Upload Manifests Artifact
-        uses: actions/upload-artifact@v3
+        id: upload_artifact
+        uses: actions/upload-artifact@v4
         with:
           # 使用文件名作为 artifact 名称的一部分
           name: local-manifests-${{ env.filename }}
           # 上传生成的目录
           path: ${{ env.filename }}
+
+      - name: Show Artifact Outputs
+        run: |
+          echo "Artifact ID: ${{ steps.upload_artifact.outputs.artifact-id }}"
+          echo "Artifact URL: ${{ steps.upload_artifact.outputs.artifact-url }}"
