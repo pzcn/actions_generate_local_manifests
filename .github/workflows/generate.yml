@@ -1,92 +1,44 @@
-#
-# Copyright (C) 2024 Souhrud Reddy
-#
-# SPDX-License-Identifier: Apache-2.0
-#
-
 name: Generate Manifests
 
 on:
   workflow_dispatch:
   push:
+
 jobs:
   build:
     name: Generate Local Manifests by ${{ github.actor }}
     if: github.event.repository.owner.id == github.event.sender.id
     runs-on: ubuntu-20.04
-    env:
-      GITHUB_TOKEN: ${{ secrets.PAT }}
-    permissions: write-all
     steps:
-    - name: Check Out
-      uses: actions/checkout@v4
+      - name: Check Out
+        uses: actions/checkout@v4
 
-    - name: Prepare GithubCLI
-      run: |
-        type -p curl >/dev/null || (sudo apt update && sudo apt install curl -y)
-        curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
-        && sudo chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg \
-        && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
-        && sudo apt update \
-        && sudo apt install gh -y  
-
-    - name: Configure git credentials
-      run: |
-        git config --global user.name "${{ github.actor }}"
-        git config --global user.email "${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com"
-        git config --global credential.helper store
-        echo "https://${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}@github.com" > ~/.git-credentials
-      env:
-        GITHUB_TOKEN: ${{ secrets.PAT }}
-
-    - name: Execute script
-      run: |
+      - name: Execute script
+        run: |
+          # 查找仓库中以 .txt 为后缀的文件，并提取文件名（不含扩展名）
           filename=$(find . -type f -name "*.txt" | sed 's/\.\///g' | sed 's/\.txt//g')
-          echo "$filename"
+          echo "Found filename: $filename"
+          
+          # 创建与文件名同名的目录
           mkdir -p "$filename"
+          
+          # 将 filename 导出到 GitHub 环境变量，以便后续步骤使用
           echo "filename=$filename" >> "$GITHUB_ENV"
-          rm local_manifests.xml || true
-          bash adapt.sh $filename.txt
-          mv local_manifests.xml $filename/
-
-          echo "TESTING=$(cat test_status)" >> "$GITHUB_ENV"
-          echo "TESTING_URL=$(cat url)" >> "$GITHUB_ENV"
-          echo "TESTING_BRANCH=$(cat branch)" >> "$GITHUB_ENV"
-
-    - name: Push to Github as Repository
-      run: |
-        cd $filename
-        USERNAME=${{ github.actor }}
-        TOKEN=${{ secrets.PAT }}
-        git init
-        git branch -M $filename
-        git add .
-        git commit -s -m "$filename: local_manifests: upload template"
-        curl -u "$USERNAME:$TOKEN" https://api.github.com/user/repos -d '{"name":"local_manifests_'$filename'"}' || true
-        git remote add origin https://$USERNAME:$TOKEN@github.com/$USERNAME/local_manifests_$filename.git
-        git push -f origin $filename
-
-    - name: Run Workflow to Check Manifests
-      run: |
-       if [ -f "test_status" ]; then
-        USERNAME=${{ github.actor }}
-        TOKEN=${{ secrets.PAT }}
-
-        bash check.sh --user $USERNAME --token $TOKEN
-
-        if ! command -v gh &> /dev/null
-          then
-          echo "gh could not be found. Installing gh..."
-          curl -sS https://webi.sh/gh | sh
-          source ~/.config/envman/PATH.env
-          echo "gh installed."
-        fi
-
-        git clone https://$USERNAME:$TOKEN@github.com/$USERNAME/Manifest_Tester
-        cd Manifest_Tester
-        gh repo set-default https://github.com/$USERNAME/Manifest_Tester.git
+          
+          # 清理旧的文件（如果存在）
+          rm -f local_manifests.xml
+          
+          # 执行 adapt.sh 脚本，生成 local_manifests.xml
+          bash adapt.sh "$filename.txt"
+          
+          # 将生成的 XML 文件移动到对应目录中
+          mv local_manifests.xml "$filename/"
         
-        gh workflow run main.yml -f LOCAL_MANIFEST_URL="https://github.com/$USERNAME/local_manifests_$filename" -f LOCAL_MANIFEST_BRANCH="$filename" -f ROM_MANIFEST_URL="$TESTING_URL" -f ROM_MANIFEST_BRANCH="$TESTING_BRANCH" -f CHOICE="LOCAL_MANIFEST"
 
-        echo "Testing Started! Please Check https://github.com/$USERNAME/Manifest_Tester/actions"
-       fi
+      - name: Upload Manifests Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          # 使用文件名作为 artifact 名称的一部分
+          name: local-manifests-${{ env.filename }}
+          # 上传生成的目录
+          path: ${{ env.filename }}
